@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Safety Checker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #00e5ff;
+    --accent2: #ff3c6e;
+    --warn: #ffb800;
+    --ok: #00e676;
+    --text: #e8e8f0;
+    --muted: #6b6b85;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+
+  .shield {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+
+  .header h1 {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+
+  .header p {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .editor-wrap {
+    position: relative;
+    margin-bottom: 16px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 160px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.7;
+    padding: 16px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); }
+
+  .char-count {
+    position: absolute;
+    bottom: 10px;
+    right: 14px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  button {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-scan {
+    background: var(--accent);
+    color: #000;
+    flex: 1;
+  }
+
+  .btn-scan:hover { opacity: 0.85; transform: translateY(-1px); }
+
+  .btn-clear {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  .btn-clear:hover { color: var(--text); border-color: var(--muted); }
+
+  /* Results */
+  .results { display: none; }
+  .results.visible { display: block; }
+
+  .verdict {
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--font-head);
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .verdict.safe { background: rgba(0,230,118,0.1); border: 1px solid rgba(0,230,118,0.3); color: var(--ok); }
+  .verdict.warn  { background: rgba(255,184,0,0.1);  border: 1px solid rgba(255,184,0,0.3);  color: var(--warn); }
+  .verdict.danger{ background: rgba(255,60,110,0.1); border: 1px solid rgba(255,60,110,0.3); color: var(--accent2); }
+
+  .verdict-icon { font-size: 22px; }
+
+  .checks-grid {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .check-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .check-item.pass  { border-left: 3px solid var(--ok); }
+  .check-item.fail  { border-left: 3px solid var(--accent2); }
+  .check-item.caution { border-left: 3px solid var(--warn); }
+
+  .check-status {
+    font-size: 14px;
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+
+  .check-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+
+  .check-detail {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .check-detail.flagged {
+    color: var(--accent2);
+  }
+
+  .check-detail.warned {
+    color: var(--warn);
+  }
+
+  .redacted-preview {
+    margin-top: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .redacted-header {
+    background: var(--surface2);
+    padding: 10px 16px;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .redacted-body {
+    padding: 14px 16px;
+    font-size: 12px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  mark.redact {
+    background: var(--accent2);
+    color: transparent;
+    border-radius: 3px;
+    padding: 1px 3px;
+    user-select: none;
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+
+  mark.redact::after {
+    content: '█████';
+    color: var(--accent2);
+  }
+
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  .score-bar-wrap {
+    margin-bottom: 16px;
+  }
+
+  .score-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .score-bar {
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .score-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .tip-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 8px;
+  }
+
+  .tip-box strong { color: var(--accent); }
+
+  /* Highlight in textarea */
+  .scanning { border-color: var(--accent) !important; animation: pulse 0.8s ease infinite alternate; }
+  @keyframes pulse { from { box-shadow: 0 0 0 0 rgba(0,229,255,0.2); } to { box-shadow: 0 0 0 6px rgba(0,229,255,0); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <svg class="shield" viewBox="0 0 40 40" fill="none">
+    <path d="M20 4L6 9v10c0 8.5 5.9 16.4 14 18.9C28.1 35.4 34 27.5 34 19V9L20 4z" fill="rgba(0,229,255,0.12)" stroke="#00e5ff" stroke-width="1.5"/>
+    <path d="M14 20l4 4 8-8" stroke="#00e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div>
+    <h1>Prompt Safety Checker</h1>
+    <p>Scans your message before it reaches any AI — catches secrets, PII & risky patterns globally</p>
+  </div>
+</div>
+
+<div class="editor-wrap">
+  <textarea id="prompt-input" placeholder="Paste your prompt here before sending to Claude...&#10;&#10;Example: 'My API key is sk-abc123, help me debug this code'"></textarea>
+  <span class="char-count" id="char-count">0 chars</span>
+</div>
+
+<div class="btn-row">
+  <button class="btn-scan" onclick="runScan()">▶ Scan Prompt</button>
+  <button class="btn-clear" onclick="clearAll()">✕ Clear</button>
+</div>
+
+<div class="results" id="results">
+
+  <div class="score-bar-wrap">
+    <div class="score-label">
+      <span>Safety score</span>
+      <span id="score-text">—</span>
+    </div>
+    <div class="score-bar">
+      <div class="score-fill" id="score-fill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="verdict" id="verdict">
+    <span class="verdict-icon" id="verdict-icon"></span>
+    <span id="verdict-text"></span>
+  </div>
+
+  <div class="checks-grid" id="checks-grid"></div>
+
+  <div class="redacted-preview" id="redacted-wrap" style="display:none">
+    <div class="redacted-header">
+      <span>Redacted preview — safe to send</span>
+      <button class="copy-btn" onclick="copyRedacted()">Copy</button>
+    </div>
+    <div class="redacted-body" id="redacted-body"></div>
+  </div>
+
+  <div class="tip-box" id="tip-box"></div>
+</div>
+
+<script>
+const input = document.getElementById('prompt-input');
+input.addEventListener('input', () => {
+  document.getElementById('char-count').textContent = input.value.length + ' chars';
+});
+
+const CHECKS = [
+  {
+    id: 'api_keys',
+    label: 'API keys & tokens',
+    severity: 'fail',
+    patterns: [
+      /sk-[a-zA-Z0-9]{20,}/g,
+      /sk-ant-[a-zA-Z0-9\-]{30,}/g,
+      /AIza[0-9A-Za-z\-_]{35}/g,
+      /ghp_[a-zA-Z0-9]{36}/g,
+      /github_pat_[a-zA-Z0-9_]{80,}/g,
+      /xox[bpoa]-[0-9a-zA-Z\-]+/g,
+      /AKIA[0-9A-Z]{16}/g,
+      /Bearer\s+[a-zA-Z0-9\-._~+/]+=*/gi,
+      /token["\s:=]+[a-zA-Z0-9\-._]{20,}/gi,
+      /api[_-]?key["\s:=]+[a-zA-Z0-9\-._]{10,}/gi,
+      /secret["\s:=is]+[a-zA-Z0-9\-._]{10,}/gi,
+      /access[_-]?key["\s:=]+[a-zA-Z0-9\-._]{10,}/gi,
+      /client[_-]?secret["\s:=]+[a-zA-Z0-9\-._]{10,}/gi,
+      /SG\.[a-zA-Z0-9\-_]{22}\.[a-zA-Z0-9\-_]{43}/g,
+    ],
+    describe: (matches) => `Found potential API key/token: ${matches.slice(0,2).join(', ')}${matches.length>2?' ...':''}`,
+    ok: 'No API keys or tokens detected'
+  },
+  {
+    id: 'passwords',
+    label: 'Passwords & credentials',
+    severity: 'fail',
+    patterns: [
+      /password[\s"':=is]+\S{4,}/gi,
+      /passwd[\s"':=is]+\S{4,}/gi,
+      /pwd[\s"':=is]+\S{4,}/gi,
+      /my password is\s+\S{3,}/gi,
+      /the password is\s+\S{3,}/gi,
+      /credentials?[\s"':=]+\S{4,}/gi,
+      /passphrase[\s"':=is]+\S{4,}/gi,
+    ],
+    describe: (m) => `Password value detected in plain text — never share`,
+    ok: 'No passwords detected'
+  },
+  {
+    id: 'usernames',
+    label: 'Usernames & login IDs',
+    severity: 'caution',
+    patterns: [
+      /username[\s"':=]+\S{2,}/gi,
+      /my username is\s+\S{2,}/gi,
+      /user\s*id[\s"':=]+\S{2,}/gi,
+      /login\s*id[\s"':=]+\S{2,}/gi,
+      /account\s*id[\s"':=]+\S{2,}/gi,
+    ],
+    describe: (m) => `Username/login ID found — does Claude need this?`,
+    ok: 'No usernames detected'
+  },
+  {
+    id: 'credit_card',
+    label: 'Credit / debit card numbers',
+    severity: 'fail',
+    patterns: [
+      /\b4[0-9]{12}(?:[0-9]{3})?\b/g,
+      /\b5[1-5][0-9]{14}\b/g,
+      /\b3[47][0-9]{13}\b/g,
+      /\b(?:\d{4}[\s\-]){3}\d{4}\b/g,
+      /cvv[\s:=]+\d{3,4}/gi,
+      /cvc[\s:=]+\d{3,4}/gi,
+      /card\s*number[\s:=]+[\d\s\-]{13,19}/gi,
+    ],
+    describe: (m) => `Card number or CVV detected — never share financial card data`,
+    ok: 'No card numbers detected'
+  },
+  {
+    id: 'national_ids',
+    label: 'National ID numbers',
+    severity: 'fail',
+    patterns: [
+      /\b[2-9]{1}[0-9]{3}\s?[0-9]{4}\s?[0-9]{4}\b/g,
+      /\b\d{3}-\d{2}-\d{4}\b/g,
+      /\b\d{9}\b(?=.*\b(ssn|social security)\b)/gi,
+      /[A-Z]{2}\s?\d{6}\s?[A-Z]/g,
+      /\b\d{3}\s?\d{3}\s?\d{3}\b(?=.*\b(sin|social insurance)\b)/gi,
+      /[A-Z]{5}[0-9]{4}[A-Z]{1}/g,
+      /\b\d{10}\b(?=.*\b(aadhar|aadhaar)\b)/gi,
+    ],
+    describe: (m) => `National ID number (Aadhaar/SSN/Passport etc.) detected — never share`,
+    ok: 'No national ID numbers detected'
+  },
+  {
+    id: 'phone',
+    label: 'Phone numbers',
+    severity: 'caution',
+    patterns: [
+      /(\+91[\s\-]?)?[6-9]\d{9}\b/g,
+      /(\+1[\s\-]?)?\(?\d{3}\)?[\s\-]\d{3}[\s\-]\d{4}\b/g,
+      /(\+44[\s\-]?)?0?7\d{9}\b/g,
+      /\+\d{1,3}[\s\-]\d{6,14}/g,
+      /phone[\s:=]+[\d\s\+\-\(\)]{8,}/gi,
+      /mobile[\s:=]+[\d\s\+\-\(\)]{8,}/gi,
+      /contact[\s:=]+[\d\s\+\-\(\)]{8,}/gi,
+    ],
+    describe: (m) => `Phone number detected — consider if Claude needs this`,
+    ok: 'No phone numbers detected'
+  },
+  {
+    id: 'email',
+    label: 'Email addresses',
+    severity: 'caution',
+    patterns: [
+      /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g,
+      /email\s+(to|on|at|is|:)\s+[a-zA-Z0-9._%+\-]{4,}/gi,
+      /receive\s+on\s+[a-zA-Z0-9._%+\-]{4,}/gi,
+      /notify\s+(me\s+)?(at|on)\s+[a-zA-Z0-9._%+\-]{4,}/gi,
+      /send\s+(it\s+)?to\s+[a-zA-Z0-9._%+\-]{4,}/gi,
+    ],
+    describe: (m) => `Email reference found: ${m[0]} — needed?`,
+    ok: 'No email addresses detected'
+  },
+  {
+    id: 'private_keys',
+    label: 'Private keys / certificates',
+    severity: 'fail',
+    patterns: [
+      /-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/g,
+      /-----BEGIN CERTIFICATE-----/g,
+      /-----BEGIN PGP PRIVATE KEY BLOCK-----/g,
+    ],
+    describe: (m) => `Private key or certificate detected — never share this`,
+    ok: 'No private keys/certs detected'
+  },
+  {
+    id: 'db_conn',
+    label: 'Database / connection strings',
+    severity: 'fail',
+    patterns: [
+      /mongodb(\+srv)?:\/\/[^\s]+/gi,
+      /postgres(ql)?:\/\/[^\s]+/gi,
+      /mysql:\/\/[^\s]+/gi,
+      /redis:\/\/[^\s]+/gi,
+      /mssql:\/\/[^\s]+/gi,
+      /amqp:\/\/[^\s]+/gi,
+      /Server=.+;Database=.+;/gi,
+      /Data Source=.+;Initial Catalog=.+;/gi,
+    ],
+    describe: (m) => `Database connection string detected`,
+    ok: 'No connection strings detected'
+  },
+  {
+    id: 'ip_internal',
+    label: 'Internal IP / host addresses',
+    severity: 'caution',
+    patterns: [
+      /\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b/g,
+      /\blocalhost:\d{2,5}\b/gi,
+      /\b127\.0\.0\.\d+\b/g,
+    ],
+    describe: (m) => `Internal network address found: ${m[0]}`,
+    ok: 'No internal IPs detected'
+  },
+  {
+    id: 'cloud_config',
+    label: 'Cloud / infra config',
+    severity: 'fail',
+    patterns: [
+      /aws[_-]?(access[_-]?key|secret)["\s:=]+[a-zA-Z0-9\/+]{16,}/gi,
+      /storage[_-]?account["\s:=]+[a-zA-Z0-9]{3,24}/gi,
+      /subscription[_-]?id[\s:=]+[a-f0-9\-]{36}/gi,
+      /client[_-]?id[\s:=]+[a-f0-9\-]{36}/gi,
+      /tenant[_-]?id[\s:=]+[a-f0-9\-]{36}/gi,
+      /project[_-]?id[\s:=]+"[a-z][a-z0-9\-]{4,28}[a-z0-9]"/gi,
+    ],
+    describe: (m) => `Cloud infrastructure credential detected`,
+    ok: 'No cloud config secrets detected'
+  },
+  {
+    id: 'nda_signals',
+    label: 'Confidential / NDA signals',
+    severity: 'caution',
+    patterns: [
+      /\bconfidential\b/gi,
+      /\bproprietary\b/gi,
+      /\bnot for distribution\b/gi,
+      /\binternal only\b/gi,
+      /\bdo not share\b/gi,
+      /\bunder NDA\b/gi,
+      /\btrade secret\b/gi,
+      /\brestricted\b/gi,
+    ],
+    describe: (m) => `Document marked confidential/proprietary — verify sharing is OK`,
+    ok: 'No confidentiality markers found'
+  },
+];
+
+function findMatches(text, patterns) {
+  const found = [];
+  for (const p of patterns) {
+    const re = new RegExp(p.source, p.flags);
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      found.push(m[0]);
+      if (found.length >= 5) break;
+    }
+    if (found.length >= 5) break;
+  }
+  return [...new Set(found)];
+}
+
+function redactText(text) {
+  let out = text;
+  for (const check of CHECKS) {
+    for (const p of check.patterns) {
+      const re = new RegExp(p.source, p.flags);
+      out = out.replace(re, (match) => `<mark class="redact" title="${check.label}"></mark>`);
+    }
+  }
+  return out;
+}
+
+function runScan() {
+  const text = input.value.trim();
+  if (!text) { input.focus(); return; }
+
+  input.classList.add('scanning');
+  setTimeout(() => input.classList.remove('scanning'), 600);
+
+  const results = document.getElementById('results');
+  results.classList.add('visible');
+
+  let failCount = 0, cautionCount = 0;
+  const checkResults = [];
+
+  for (const check of CHECKS) {
+    const matches = findMatches(text, check.patterns);
+    const triggered = matches.length > 0;
+    if (triggered) {
+      if (check.severity === 'fail') failCount++;
+      else cautionCount++;
+    }
+    checkResults.push({ check, triggered, matches });
+  }
+
+  // Score
+  const total = CHECKS.length;
+  const score = Math.max(0, Math.round(((total - failCount * 2 - cautionCount * 0.5) / total) * 100));
+  const scoreEl = document.getElementById('score-fill');
+  const scoreText = document.getElementById('score-text');
+  scoreEl.style.width = score + '%';
+  scoreEl.style.background = score >= 80 ? 'var(--ok)' : score >= 50 ? 'var(--warn)' : 'var(--accent2)';
+  scoreText.textContent = score + ' / 100';
+
+  // Verdict
+  const verdict = document.getElementById('verdict');
+  const verdictIcon = document.getElementById('verdict-icon');
+  const verdictText = document.getElementById('verdict-text');
+  verdict.className = 'verdict';
+  if (failCount > 0) {
+    verdict.classList.add('danger');
+    verdictIcon.textContent = '⛔';
+    verdictText.textContent = `Blocked — ${failCount} critical issue${failCount>1?'s':''} found. Do not send.`;
+  } else if (cautionCount > 0) {
+    verdict.classList.add('warn');
+    verdictIcon.textContent = '⚠️';
+    verdictText.textContent = `Caution — ${cautionCount} item${cautionCount>1?'s':''} to review before sending.`;
+  } else {
+    verdict.classList.add('safe');
+    verdictIcon.textContent = '✅';
+    verdictText.textContent = 'Clear — no sensitive data detected. Safe to send.';
+  }
+
+  // Checks grid
+  const grid = document.getElementById('checks-grid');
+  grid.innerHTML = '';
+  for (const { check, triggered, matches } of checkResults) {
+    const status = triggered ? check.severity : 'pass';
+    const icon = status === 'pass' ? '✓' : status === 'fail' ? '✗' : '!';
+    const detailClass = status === 'fail' ? 'flagged' : status === 'caution' ? 'warned' : '';
+    const detail = triggered ? check.describe(matches) : check.ok;
+    grid.innerHTML += `
+      <div class="check-item ${status}">
+        <span class="check-status">${icon}</span>
+        <div>
+          <div class="check-label">${check.label}</div>
+          <div class="check-detail ${detailClass}">${detail}</div>
+        </div>
+      </div>`;
+  }
+
+  // Redacted preview
+  const redactedWrap = document.getElementById('redacted-wrap');
+  const redactedBody = document.getElementById('redacted-body');
+  if (failCount > 0 || cautionCount > 0) {
+    redactedWrap.style.display = 'block';
+    redactedBody.innerHTML = redactText(input.value);
+  } else {
+    redactedWrap.style.display = 'none';
+  }
+
+  // Tip
+  const tipBox = document.getElementById('tip-box');
+  if (failCount > 0) {
+    tipBox.innerHTML = '<strong>Tip:</strong> Remove sensitive values and replace with placeholders like <code>[API_KEY]</code>, <code>[PASSWORD]</code>, or <code>[CARD_NUMBER]</code>. Claude doesn\'t need real values to help you debug or automate tasks. <br><br><strong style="color:var(--muted);font-size:10px">Open source tool — works offline, zero data sent anywhere. Share freely.</strong>';
+  } else if (cautionCount > 0) {
+    tipBox.innerHTML = '<strong>Tip:</strong> Flagged items may be fine in context — but ask: does Claude actually need this info? If not, remove it before sending. <br><br><strong style="color:var(--muted);font-size:10px">Open source tool — works offline, zero data sent anywhere. Share freely.</strong>';
+  } else {
+    tipBox.innerHTML = '<strong>Tip:</strong> Prompt looks clean! Remember: even safe prompts shouldn\'t include internal company strategy, unreleased product details, or client data under NDA. <br><br><strong style="color:var(--muted);font-size:10px">Open source tool — works offline, zero data sent anywhere. Share freely.</strong>';
+  }
+}
+
+function clearAll() {
+  input.value = '';
+  document.getElementById('char-count').textContent = '0 chars';
+  document.getElementById('results').classList.remove('visible');
+}
+
+function copyRedacted() {
+  const body = document.getElementById('redacted-body');
+  const text = body.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.ctrlKey) runScan();
+});
+</script>
+</body>
+</html>
