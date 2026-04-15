@@ -25,6 +25,10 @@ This tool helps you enforce that habit by scanning your prompt locally before yo
 - **Zero dependencies** — single file, open in any browser
 - **Redacted preview** — shows a safe version you can copy and send
 - **Safety score** — quick visual pass/fail per category
+- **Prompt caching assist** — estimates reusable prefix tokens and generates a follow-up delta prompt
+- **Slim Prompt mode** — removes filler wording to reduce token footprint
+- **Reusable template blocks** — keep a stable high-value prefix for stronger cache reuse
+- **Session savings tracker** — cumulative tokens avoided across scans in the current browser session
 - Works before sending to **any AI tool**, not just Claude
 
 ---
@@ -55,6 +59,8 @@ This tool helps you enforce that habit by scanning your prompt locally before yo
 2. Open it in any browser
 3. Paste your prompt → click **Scan Prompt**
 4. Review results, copy the redacted version if needed
+5. Optionally enable **Slim Prompt mode** and/or select a **Template Block** to optimize prompt size
+6. For follow-up prompts, use the **Prompt caching estimate** and copy the **delta prompt** to reduce new input tokens
 
 ### Option B — GitHub Pages (hosted)
 Fork this repo and enable GitHub Pages (`Settings → Pages → Deploy from main`). Your own hosted instance at `https://yourusername.github.io/prompt-safety-checker`
@@ -67,6 +73,18 @@ Fork this repo and enable GitHub Pages (`Settings → Pages → Deploy from main
 ## Privacy guarantee
 
 Open the browser devtools (`F12 → Network`) while scanning — you will see **zero outgoing network requests**. Everything runs as local JavaScript regex pattern matching. Nothing leaves your machine.
+
+## Prompt caching note
+
+The tool now includes a local **model-agnostic prefix cache estimate**. It stores recent prompt prefixes in browser local storage and reports:
+- estimated total tokens
+- reusable cached tokens
+- new tokens likely billed on this send
+- reduction percentage
+
+It also generates a follow-up **delta prompt** (the changed tail after a stable prefix) so you can send less repeated context on iterative prompts.
+
+No model toggle is required for this flow. Stable prefix + changed tail works across providers; only exact token accounting varies by tokenizer.
 
 ---
 
