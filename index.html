@@ -387,7 +387,6 @@
   .scanning { border-color: var(--accent) !important; animation: pulse 0.8s ease infinite alternate; }
   @keyframes pulse { from { box-shadow: 0 0 0 0 rgba(0,229,255,0.2); } to { box-shadow: 0 0 0 6px rgba(0,229,255,0); } }
 
-<<<<<<< HEAD
   /* Copy & Send master button */
   .btn-copy-send {
     width: 100%;
@@ -1435,13 +1434,9 @@ function runScan() {
 }
 
 function clearAll() {
-<<<<<<< HEAD
-  input.value = '';
-=======
   input.value          = '';
   slimToggle.checked   = false;
   templateSelect.value = 'none';
->>>>>>> 398bea0ee05e27c950421ed19745c901c587055c
   document.getElementById('char-count').textContent = '0 chars · ~0 tokens';
   document.getElementById('results').classList.remove('visible');
   document.getElementById('token-optimizer').style.display = 'none';
@@ -1459,9 +1454,13 @@ function copySection(wrapId, bodyId) {
 const copyRedacted  = () => copySection('redacted-wrap',  'redacted-body');
 const copyDelta     = () => copySection('delta-wrap',     'delta-body');
 const copyOptimized = () => copySection('optimized-wrap', 'optimized-body');
-  input.value          = '';
-  slimToggle.checked   = false;
-  templateSelect.value = 'none';
+
+// ─── Image token calculators ─────────────────────────────────────────────────
+let _imgW = 0, _imgH = 0, _imgEl = null;
+
+function calcGPT4oTokens(w, h) {
+  if (w > 2048 || h > 2048) { const r = 2048 / Math.max(w, h); w = Math.floor(w*r); h = Math.floor(h*r); }
+  const mn = Math.min(w, h);
   if (mn > 768) { const r = 768 / mn; w = Math.floor(w*r); h = Math.floor(h*r); }
   return 85 + 170 * Math.ceil(w / 512) * Math.ceil(h / 512);
 }
@@ -1574,13 +1573,14 @@ dropZone.addEventListener('drop', (e) => {
 document.addEventListener('paste', (e) => {
   const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
   if (!item) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const file = item.getAsFile();
+  if (!file) return;
   const reader = new FileReader();
   reader.onload = (ev) => loadImageFromSrc(ev.target.result);
-  reader.readAsDataURL(item.getAsFile());
-=======
-const copyRedacted  = () => copySection('redacted-wrap',  'redacted-body');
-const copyDelta     = () => copySection('delta-wrap',     'delta-body');
-const copyOptimized = () => copySection('optimized-wrap', 'optimized-body');
+  reader.readAsDataURL(file);
+}, true); // Capture phase — intercept before bubbling
 
 // ─── EVENT LISTENERS ──────────────────────────────────────────────────────────
 
@@ -1588,7 +1588,6 @@ input.addEventListener('input', () => {
   const len = input.value.length;
   const tok = estimateTokens(input.value);
   document.getElementById('char-count').textContent = `${len} chars · ~${tok} tokens`;
->>>>>>> 398bea0ee05e27c950421ed19745c901c587055c
 });
 
 input.addEventListener('keydown', (e) => {
@@ -1597,22 +1596,3 @@ input.addEventListener('keydown', (e) => {
 </script>
 </body>
 </html>
-─── EVENT LISTENERS ──────────────────────────────────────────────────────────
-
-input.addEventListener('input', () => {
-  const len = input.value.length;
-  const tok = estimateTokens(input.value);
-  document.getElementById('char-count').textContent = `${len} chars · ~${tok} tokens`;
-});
-
-input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.ctrlKey) runScan();
-});
-
-// Global Ctrl+V paste — captures images pasted anywhere on the page
-document.addEventListener('paste', (e) => {
-  const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
-  if (!item) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => loadImageFromSrc(ev.target.result);
-  reader.readAsDataURL(item.getAsFile()
