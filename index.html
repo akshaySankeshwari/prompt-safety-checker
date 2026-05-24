@@ -648,8 +648,8 @@
 </div>
 
 <div class="btn-row">
-  <button class="btn-scan" onclick="runScan()">▶ Scan Prompt</button>
-  <button class="btn-clear" onclick="clearAll()">✕ Clear</button>
+  <button type="button" class="btn-scan" onclick="runScan()">▶ Scan Prompt</button>
+  <button type="button" class="btn-clear" onclick="clearAll()">✕ Clear</button>
 </div>
 
 <div class="opt-row">
@@ -689,14 +689,14 @@
     <span id="verdict-text"></span>
   </div>
 
-  <button class="btn-copy-send" id="copy-send-btn" onclick="copyAndSend()">⎘ Copy Clean Prompt — ready to paste into any AI</button>
+  <button type="button" class="btn-copy-send" id="copy-send-btn" onclick="copyAndSend()">⎘ Copy Clean Prompt — ready to paste into any AI</button>
 
   <div class="checks-grid" id="checks-grid"></div>
 
   <div class="redacted-preview" id="redacted-wrap" style="display:none">
     <div class="redacted-header">
       <span>Redacted preview — safe to send</span>
-      <button class="copy-btn" onclick="copyRedacted()">Copy</button>
+      <button type="button" class="copy-btn" onclick="copyRedacted()">Copy</button>
     </div>
     <div class="redacted-body" id="redacted-body"></div>
   </div>
@@ -704,7 +704,7 @@
   <div class="redacted-preview" id="delta-wrap" style="display:none">
     <div class="redacted-header">
       <span>Cache-aware delta prompt (send only this on follow-up)</span>
-      <button class="copy-btn" onclick="copyDelta()">Copy</button>
+      <button type="button" class="copy-btn" onclick="copyDelta()">Copy</button>
     </div>
     <div class="redacted-body" id="delta-body"></div>
   </div>
@@ -712,7 +712,7 @@
   <div class="redacted-preview" id="optimized-wrap" style="display:none">
     <div class="redacted-header">
       <span>Optimized prompt (template + slim mode)</span>
-      <button class="copy-btn" onclick="copyOptimized()">Copy</button>
+      <button type="button" class="copy-btn" onclick="copyOptimized()">Copy</button>
     </div>
     <div class="redacted-body" id="optimized-body"></div>
   </div>
@@ -768,7 +768,7 @@
     <div class="token-optimized-wrap" id="token-optimized-wrap" style="display:none">
       <div class="token-optimized-header">
         <span>Compressed prompt — safe to send</span>
-        <button class="copy-btn" id="copy-optimized-btn" onclick="copyOptimized()">Copy</button>
+        <button type="button" class="copy-btn" id="copy-optimized-btn" onclick="copyTokenOptimized()">Copy</button>
       </div>
       <div class="token-optimized-body" id="token-optimized-body"></div>
     </div>
@@ -784,7 +784,7 @@
   <div class="img-drop-zone" id="img-drop-zone" onclick="document.getElementById('img-file-input').click()">
     <input type="file" id="img-file-input" accept="image/*" style="display:none" onchange="loadImageFile(this)">
     Drop image here &nbsp;·&nbsp; paste with <kbd style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-size:10px">Ctrl+V</kbd> &nbsp;·&nbsp; or
-    <button class="browse-btn" onclick="event.stopPropagation();document.getElementById('img-file-input').click()">Browse</button>
+    <button type="button" class="browse-btn" onclick="handleBrowseClick(event)">Browse</button>
   </div>
 
   <div class="img-workspace" id="img-workspace" style="display:none">
@@ -815,7 +815,7 @@
       <tbody id="img-token-tbody"></tbody>
     </table>
 
-    <button class="btn-copy-img" id="btn-copy-img" onclick="copyResizedImage()">⎘ Copy Resized Image to Clipboard</button>
+    <button type="button" class="btn-copy-img" id="btn-copy-img" onclick="copyResizedImage()">⎘ Copy Resized Image to Clipboard</button>
   </div>
 </section>
 
@@ -1348,7 +1348,7 @@ function renderCachePanel(cacheEstimate, optSavedTokens, scanAvoidedTokens, sess
   }
 }
 
-function renderTip(failCount, cautionCount) {
+function renderTip(text, failCount, cautionCount) {
   const footer = '<br><br><strong style="color:var(--muted);font-size:10px">Open source tool — works offline, zero data sent anywhere. Share freely.</strong>';
   const tipBox = document.getElementById('tip-box');
   if (failCount > 0) {
@@ -1401,6 +1401,26 @@ function renderTip(failCount, cautionCount) {
   }
 }
 
+function updateCopySendBtn(failCount, cautionCount) {
+  const btn = document.getElementById('copy-send-btn');
+  if (!btn) return;
+  btn.classList.remove('state-warn', 'state-block');
+  btn.dataset.failCount = String(failCount);
+  btn.dataset.cautionCount = String(cautionCount);
+
+  if (failCount > 0) {
+    btn.classList.add('state-block');
+    btn.textContent = 'Blocked — fix critical issues before copying';
+    return;
+  }
+  if (cautionCount > 0) {
+    btn.classList.add('state-warn');
+    btn.textContent = '⎘ Copy Reviewed Prompt — caution items present';
+    return;
+  }
+  btn.textContent = '⎘ Copy Clean Prompt — ready to paste into any AI';
+}
+
 // ─── ORCHESTRATION ────────────────────────────────────────────────────────────
 
 function runScan() {
@@ -1428,7 +1448,7 @@ function runScan() {
   const lifetimeStats     = LifetimeStats.update(scanAvoidedTokens);
 
   renderCachePanel(cacheEstimate, optSavedTokens, scanAvoidedTokens, sessionStats, lifetimeStats);
-  renderTip(failCount, cautionCount);
+  renderTip(rawText, failCount, cautionCount);
 
   PrefixCache._lastPrompt = optimization.optimized;
 }
@@ -1442,18 +1462,113 @@ function clearAll() {
   document.getElementById('token-optimizer').style.display = 'none';
 }
 
-function copySection(wrapId, bodyId) {
-  const text = document.getElementById(bodyId).innerText;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.querySelector(`#${wrapId} .copy-btn`);
-    btn.textContent = 'Copied!';
-    setTimeout(() => btn.textContent = 'Copy', 1500);
-  });
+async function writeTextWithFallback(text) {
+  if (!text) return false;
+
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to execCommand fallback for file:// or blocked clipboard APIs.
+    }
+  }
+
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.top = '-1000px';
+  ta.style.left = '-1000px';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+
+  // Avoid execCommand copy on file:// pages; Chromium may emit unique-origin frame warnings.
+  if (location.protocol === 'file:') {
+    document.body.removeChild(ta);
+    return false;
+  }
+
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  return ok;
 }
 
-const copyRedacted  = () => copySection('redacted-wrap',  'redacted-body');
-const copyDelta     = () => copySection('delta-wrap',     'delta-body');
-const copyOptimized = () => copySection('optimized-wrap', 'optimized-body');
+function handleBrowseClick(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const input = document.getElementById('img-file-input');
+  if (input) input.click();
+}
+
+function flashCopyBtn(btn, ok, originalText = 'Copy') {
+  if (!btn) return;
+  btn.textContent = ok ? 'Copied!' : 'Copy failed';
+  setTimeout(() => { btn.textContent = originalText; }, 1500);
+}
+
+async function copySection(wrapId, bodyId) {
+  const body = document.getElementById(bodyId);
+  const text = body ? (body.innerText || body.textContent || '').trim() : '';
+  const btn = document.querySelector(`#${wrapId} .copy-btn`);
+  const ok = await writeTextWithFallback(text);
+  flashCopyBtn(btn, ok);
+}
+
+function copyRedacted() {
+  return copySection('redacted-wrap', 'redacted-body');
+}
+
+function copyDelta() {
+  return copySection('delta-wrap', 'delta-body');
+}
+
+function copyOptimized() {
+  return copySection('optimized-wrap', 'optimized-body');
+}
+
+function copyTokenOptimized() {
+  return copySection('token-optimized-wrap', 'token-optimized-body');
+}
+
+async function copyAndSend() {
+  const btn = document.getElementById('copy-send-btn');
+  if (!btn) return;
+
+  const failCount = Number(btn.dataset.failCount || '0');
+  if (failCount > 0) {
+    flashCopyBtn(btn, false, 'Blocked — fix critical issues before copying');
+    return;
+  }
+
+  const tokenWrap = document.getElementById('token-optimized-wrap');
+  const optimizedWrap = document.getElementById('optimized-wrap');
+  const redactedWrap = document.getElementById('redacted-wrap');
+
+  const tokenOptimizedText = (document.getElementById('token-optimized-body')?.textContent || '').trim();
+  const optimizedText = (document.getElementById('optimized-body')?.textContent || '').trim();
+  const redactedText = (document.getElementById('redacted-body')?.innerText || '').trim();
+  const rawText = (input.value || '').trim();
+
+  const textToCopy =
+    (tokenWrap && tokenWrap.style.display !== 'none' && tokenOptimizedText) ? tokenOptimizedText :
+    (optimizedWrap && optimizedWrap.style.display !== 'none' && optimizedText) ? optimizedText :
+    (redactedWrap && redactedWrap.style.display !== 'none' && redactedText) ? redactedText :
+    rawText;
+
+  const originalText = btn.textContent;
+  const ok = await writeTextWithFallback(textToCopy);
+  btn.textContent = ok ? 'Copied! Paste into your AI chat' : 'Copy failed — try Ctrl+C';
+  setTimeout(() => { btn.textContent = originalText; }, 1700);
+}
 
 // ─── Image token calculators ─────────────────────────────────────────────────
 let _imgW = 0, _imgH = 0, _imgEl = null;
