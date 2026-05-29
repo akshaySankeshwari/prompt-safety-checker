@@ -88,6 +88,42 @@ No model toggle is required for this flow. Stable prefix + changed tail works ac
 
 ---
 
+## Prompt efficiency playbook
+
+Use this checklist to reduce token usage and response length while keeping quality high.
+
+### Prompting
+
+- Add brevity constraints: "be concise", "no preamble", "skip pleasantries"
+- Use bullet-point asks when possible: "list only, no explanation"
+- Add "no markdown" when formatting is unnecessary
+- Define output format up front: "respond in JSON: {field1, field2}"
+
+### Conversation hygiene
+
+- Start fresh chats for new topics instead of carrying stale context
+- Summarize long threads before continuing
+- Avoid chaining "can you also..." repeatedly; batch related asks in one message
+
+### System/operator level (API use)
+
+- Keep system prompts tight and specific
+- Use max_tokens caps to limit runaway responses
+- Cache static system prompt prefixes to cut repeated input costs
+
+### Task design
+
+- Upload docs once, then ask multiple related questions in one message
+- For code tasks, request changed lines only instead of full files
+- For analysis tasks, ask for conclusion-only when reasoning details are not needed
+
+### Model routing
+
+- Use Haiku for simple classification/extraction tasks (lower cost)
+- Reserve Sonnet/Opus for complex reasoning or implementation-heavy work
+
+---
+
 ## Contributing
 
 Patterns can always be improved. PRs welcome for:

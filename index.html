@@ -99,7 +99,7 @@
 
   .opt-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 10px;
     margin-bottom: 14px;
   }
@@ -667,6 +667,7 @@
       <option value="debug">Debugging Context</option>
       <option value="summary">Summarization Context</option>
       <option value="code_review">Code Review Context</option>
+      <option value="efficiency">Efficiency &amp; Cost Guardrails</option>
     </select>
     <div class="opt-desc">Keeps a stable high-value prefix for better cache reuse across follow-up prompts.</div>
   </div>
@@ -1046,6 +1047,18 @@ const TEMPLATE_BLOCKS = {
     'Output format: Findings by severity with file references, then risks.',
     'Constraint: Focus on defects and regressions, not style-only nits.',
   ].join('\n'),
+  efficiency: [
+    'Prompting: Be concise. No preamble. Skip pleasantries.',
+    'Prompting: Prefer list-only requests with no explanation unless reasoning is required.',
+    'Prompting: Say "no markdown" when formatting is not needed.',
+    'Prompting: Specify exact output format upfront (example: respond in JSON {field1, field2}).',
+    'Conversation hygiene: Start a fresh chat for new topics and summarize long threads before continuing.',
+    'Conversation hygiene: Avoid chained "can you also" asks; batch related requests in one message.',
+    'System/API: Keep system prompts tight, hard-cap responses with max_tokens, and cache static system prefixes.',
+    'Task design: Upload docs once and ask multiple related questions together.',
+    'Task design: For code ask for changed lines only, and for analysis ask for conclusion-only when acceptable.',
+    'Model routing: Use Haiku for simple/classify tasks; reserve Sonnet/Opus for complex reasoning.',
+  ].join('\n'),
 };
 
 // ─── MODULE: Analysis ─────────────────────────────────────────────────────────
@@ -1144,6 +1157,85 @@ function slimPrompt(text) {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function optimizeTokens(text) {
+  let optimized = text;
+  const changes = [];
+
+  const normalizationRules = [
+    {
+      pattern: /\b(can you|could you|would you)\s+please\b/gi,
+      replacement: '$1',
+      note: 'Removed polite filler around direct request.',
+    },
+    {
+      pattern: /\bi was wondering if you could\b/gi,
+      replacement: 'please',
+      note: 'Compressed indirect request phrasing.',
+    },
+    {
+      pattern: /\bit would be great if you can\b/gi,
+      replacement: 'please',
+      note: 'Shortened verbose helper phrase.',
+    },
+    {
+      pattern: /\bcan you also\b/gi,
+      replacement: 'also',
+      note: 'Reduced chained request wording.',
+    },
+    {
+      pattern: /^\s*(hi|hello|hey)\b[\s!,.-]*/gim,
+      replacement: '',
+      note: 'Removed greeting tokens from prompt body.',
+    },
+    {
+      pattern: /^\s*(thanks|thank you)[\s!,.-]*/gim,
+      replacement: '',
+      note: 'Removed closing pleasantries to save tokens.',
+    },
+  ];
+
+  for (const rule of normalizationRules) {
+    const next = optimized.replace(rule.pattern, rule.replacement);
+    if (next !== optimized) {
+      changes.push(rule.note);
+      optimized = next;
+    }
+  }
+
+  const compacted = optimized
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (compacted !== optimized) {
+    changes.push('Compacted repeated spaces and blank lines.');
+    optimized = compacted;
+  }
+
+  return {
+    optimized,
+    changes: [...new Set(changes)],
+  };
+}
+
+function detectVerbose(text) {
+  const probes = [
+    { label: 'chained "can you also" asks', pattern: /\bcan you also\b/gi },
+    { label: 'polite filler (please / kindly)', pattern: /\b(please|kindly)\b/gi },
+    { label: 'greetings and pleasantries', pattern: /\b(hi|hello|hey|thanks|thank you)\b/gi },
+  ];
+
+  return probes
+    .map((probe) => {
+      const matches = text.match(probe.pattern) || [];
+      return {
+        label: probe.label,
+        count: matches.length,
+      };
+    })
+    .filter((item) => item.count > 0);
 }
 
 function applyTemplateBlock(text, templateKey) {
